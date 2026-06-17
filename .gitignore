@@ -1,0 +1,47 @@
+# -------------------------------
+# Go
+# -------------------------------
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go module vendor
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.venv
+
+# -------------------------------
+# Docker
+# -------------------------------
+*.env
+docker-compose.override.yml
+**/Dockerfile.dev
+**/docker-compose.override.yml
+
+# -------------------------------
+# Logs
+# -------------------------------
+*.log
+logs/
+tmp/
+
+# -------------------------------
+# OS
+# -------------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------------
+# NATS
+# -------------------------------
+nats/data/*
+infra/data/
+.claude/

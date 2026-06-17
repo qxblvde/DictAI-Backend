@@ -1,0 +1,395 @@
+openapi: 3.0.3
+info:
+  title: Microservices API
+  version: 1.0.0
+  description: API всех микросервисов для работы с аудио, транскрипцией, голосами и встречами.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - user_id
+        - email
+        - created_at
+
+    Workspace:
+      type: object
+      properties:
+        workspace_id:
+          type: string
+          format: uuid
+        owner_user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - workspace_id
+        - owner_user_id
+        - name
+        - created_at
+
+    Participant:
+      type: object
+      properties:
+        participant_id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        voice_profile_id:
+          type: string
+          format: uuid
+      required:
+        - participant_id
+        - workspace_id
+        - name
+
+    Meeting:
+      type: object
+      properties:
+        meeting_id:
+          type: string
+          format: uuid
+        workspace_id:
+          type: string
+          format: uuid
+        audio_id:
+          type: string
+          format: uuid
+        transcript:
+          type: string
+          description: необработанный текст транскрипции
+        structured_transcript:
+          type: string
+          description: текст с указанием говорящего перед блоком
+        summary:
+          type: string
+        status:
+          type: string
+          enum: [pending, processed, error]
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - meeting_id
+        - workspace_id
+        - audio_id
+        - status
+
+    VoiceProfile:
+      type: object
+      properties:
+        voice_profile_id:
+          type: string
+          format: uuid
+        embeddings:
+          type: array
+          items:
+            type: number
+          description: векторные представления голоса
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - voice_profile_id
+        - embeddings
+
+paths:
+  /auth/login:
+    post:
+      summary: Вход пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - email
+                - password
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT токен с user_id
+        '401':
+          description: Неверные учетные данные
+        '400':
+          description: Некорректный запрос
+
+  /auth/register:
+    post:
+      summary: Регистрация пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - email
+                - password
+      responses:
+        '201':
+          description: Пользователь создан
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    format: uuid
+        '409':
+          description: Email уже существует
+
+  /workspaces:
+    post:
+      summary: Создать новый workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required:
+                - name
+      responses:
+        '201':
+          description: Workspace создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        '403':
+          description: Пользователь не авторизован
+
+  /workspaces/{workspace_id}/participants:
+    post:
+      summary: Добавить участника
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+              required:
+                - name
+      responses:
+        '201':
+          description: Участник добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+        '403':
+          description: Пользователь не является owner workspace
+        '409':
+          description: Email участника уже существует в workspace
+
+    get:
+      summary: Получить список участников
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список участников
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Participant'
+        '403':
+          description: Пользователь не имеет доступа
+
+  /workspaces/{workspace_id}/meetings:
+    get:
+      summary: Получить список встреч
+      parameters:
+        - name: workspace_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Список встреч
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Meeting'
+        '403':
+          description: Нет доступа к workspace
+
+  /meetings/{meeting_id}:
+    get:
+      summary: Получить детали встречи
+      parameters:
+        - name: meeting_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Детали встречи
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '403':
+          description: Нет доступа к встрече
+        '404':
+          description: Meeting не найден
+
+  /audio/upload:
+    post:
+      summary: Загрузить аудиофайл
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                workspace_id:
+                  type: string
+                  format: uuid
+              required:
+                - file
+                - workspace_id
+      responses:
+        '201':
+          description: Аудио загружено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audio_id:
+                    type: string
+                    format: uuid
+        '403':
+          description: Нет доступа к workspace
+        '400':
+          description: Некорректный файл
+
+  /voice-profiles:
+    post:
+      summary: Создать/обновить voice profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                participant_id:
+                  type: string
+                  format: uuid
+                audio_sample:
+                  type: string
+                  format: binary
+              required:
+                - participant_id
+                - audio_sample
+      responses:
+        '201':
+          description: Voice profile создан/обновлен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  voice_profile_id:
+                    type: string
+                    format: uuid
+        '403':
+          description: Нет доступа к workspace
+
+  /voice-profiles/{id}:
+    get:
+      summary: Получить embeddings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Векторные embeddings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceProfile'
+        '404':
+          description: Voice profile не найден

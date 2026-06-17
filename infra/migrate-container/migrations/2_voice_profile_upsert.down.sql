@@ -1,0 +1,1 @@
+ALTER TABLE voice_profiles DROP CONSTRAINT IF EXISTS voice_profiles_participant_id_unique;

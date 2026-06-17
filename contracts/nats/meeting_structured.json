@@ -1,0 +1,13 @@
+{
+  "event": "meeting.structured",
+  "description": "Событие с финальной структурированной транскрипцией",
+  "payload": {
+    "meeting_id": "UUID встречи",
+    "structured_transcript": [
+      {
+        "participant_id": "UUID участника",
+        "text": "текст блока речи"
+      }
+    ]
+  }
+}

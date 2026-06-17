@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microservices/services/transcription-service/proto";
+
+service AudioIngestService {
+  rpc GetAudio(GetAudioRequest) returns (stream AudioChunk);
+}
+
+message GetAudioRequest {
+    string audio_id         = 1;
+    string workspace_id     = 2;
+    string uploader_user_id = 3;
+}
+
+message AudioChunk {
+  string audio_id     = 1;
+  string workspace_id = 2;
+  bytes  content      = 3;
+}

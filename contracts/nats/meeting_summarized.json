@@ -1,0 +1,8 @@
+{
+  "event": "meeting.summarized",
+  "description": "Событие с итоговым summary встречи",
+  "payload": {
+    "meeting_id": "UUID встречи",
+    "summary": "текст summary"
+  }
+}

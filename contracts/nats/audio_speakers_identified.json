@@ -1,0 +1,15 @@
+{
+  "event": "audio.speakers_identified",
+  "description": "Событие о сопоставлении сегментов аудио с участниками",
+  "payload": {
+    "audio_id": "UUID аудио",
+    "workspace_id": "UUID workspace",
+    "transcript": "строка транскрипции",
+    "speakers": [
+      {
+        "segment": "текст сегмента",
+        "participant_id": "UUID участника"
+      }
+    ]
+  }
+}

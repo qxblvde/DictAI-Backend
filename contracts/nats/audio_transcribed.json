@@ -1,0 +1,9 @@
+{
+  "event": "audio.transcribed",
+  "description": "Событие о завершении транскрипции аудио",
+  "payload": {
+    "audio_id": "UUID аудио",
+    "workspace_id": "UUID workspace",
+    "transcript": "строка с транскрипцией"
+  }
+}

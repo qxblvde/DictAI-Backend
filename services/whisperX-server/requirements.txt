@@ -1,0 +1,5 @@
+whisperx
+fastapi
+uvicorn
+python-multipart
+aiofiles

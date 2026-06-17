@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+numpy==1.26.4
+scipy
+librosa
+soundfile
+
+torch==2.4.0
+torchaudio==2.4.0
+
+speechbrain
+python-multipart
+requests
+nats-py
+grpcio
+grpcio-tools
+protobuf

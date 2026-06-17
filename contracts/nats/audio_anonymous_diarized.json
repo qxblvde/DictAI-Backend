@@ -1,0 +1,18 @@
+{
+  "subject": "audio.anonymous_diarized",
+  "description": "Published by transcript-builder-service after anonymous audio diarization completes. Consumed by audio-ingest-service to update session status and store speaker data.",
+  "payload": {
+    "session_id": "UUID of the anonymous session",
+    "audio_id": "UUID of the audio file",
+    "owner_user_id": "UUID of the user who uploaded the audio",
+    "speakers": [
+      {
+        "label": "SPEAKER_00",
+        "fragment_key": "anonymous/{session_id}/fragments/SPEAKER_00.wav",
+        "segments": [
+          { "start": 0.0, "end": 5.2, "text": "Hello everyone" }
+        ]
+      }
+    ]
+  }
+}

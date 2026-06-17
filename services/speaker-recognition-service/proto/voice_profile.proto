@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option go_package = "github.com/Microservices/services/voice-profile-service/proto";
+
+service VoiceProfileService {
+  rpc UploadAudio(stream AudioChunk) returns (UploadAudioResponse);
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse);
+}
+
+message AudioChunk {
+    bytes content = 1;
+}
+
+message UploadAudioResponse {
+    string voice_profile_id = 1;
+}
+
+message GetProfileRequest {
+  string voice_profile_id = 1;
+}
+
+message GetProfileResponse {
+  repeated float embeddings = 1;
+}

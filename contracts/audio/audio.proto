@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package audio;
+
+option go_package = "github.com/DictAI/Microservices/contracts/audio;audio";
+
+service AudioIngestService {
+  rpc GetAudio(GetAudioRequest) returns (stream AudioChunk);
+}
+
+message GetAudioRequest {
+  string audio_id = 1;
+  string workspace_id = 2;
+  string uploader_user_id = 3;
+}
+
+message AudioChunk {
+  string audio_id = 1;
+  string workspace_id = 2;
+  bytes content = 3;
+}

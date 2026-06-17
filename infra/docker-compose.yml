@@ -1,0 +1,489 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: postgres-db-container
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./data/postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  migrate:
+    container_name: dictai_migrate_container
+    build: ./migrate-container
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      MIGRATION_VERSION: ${MIGRATION_VERSION}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  nats:
+    image: nats:alpine
+    container_name: nats
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf
+      - ./data/nats_data:/data
+    command: ["-c", "/etc/nats/nats.conf"]
+    ports:
+      - "8222:8222"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8222/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./data/minio_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  gateway:
+    build: ../services/gateway
+    container_name: gateway
+    environment:
+      GATEWAY_SERVICE_PORT: ${GATEWAY_SERVICE_PORT}
+      GATEWAY_WORKSPACE_SERVICE_URL: ${GATEWAY_WORKSPACE_SERVICE_URL}
+      GATEWAY_MEETING_SERVICE_URL: ${GATEWAY_MEETING_SERVICE_URL}
+      GATEWAY_AUDIO_INGEST_SERVICE_URL: ${GATEWAY_AUDIO_INGEST_SERVICE_URL}
+      GATEWAY_VOICE_PROFILE_SERVICE_URL: ${GATEWAY_VOICE_PROFILE_SERVICE_URL}
+      AUTH_SERVICE_JWT_SECRET: ${AUTH_SERVICE_JWT_SECRET}
+      GATEWAY_RATE_LIMIT: ${GATEWAY_RATE_LIMIT}
+      GATEWAY_RATE_LIMIT_RPS: ${GATEWAY_RATE_LIMIT_RPS}
+      GATEWAY_AUTH_SERVICE_URL: ${GATEWAY_AUTH_SERVICE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    ports:
+      - "8000:${GATEWAY_SERVICE_PORT}"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${GATEWAY_SERVICE_PORT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  auth-service:
+    build: ../services/auth-service
+    container_name: auth-service
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      AUTH_SERVICE_JWT_SECRET: ${AUTH_SERVICE_JWT_SECRET}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  workspace-service:
+    build: ../services/workspace-service
+    container_name: workspace-service
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      WORKSPACE_SERVICE_PORT: ${WORKSPACE_SERVICE_PORT}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${WORKSPACE_SERVICE_PORT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  audio-ingest-service:
+    build: ../services/audio-ingest-service
+    container_name: audio-ingest-service
+    environment:
+      NATS_URL: ${NATS_URL}
+      AUTH_SERVICE_JWT_SECRET: ${AUTH_SERVICE_JWT_SECRET}
+      AUDIO_INGEST_SERVICE_PORT: ${AUDIO_INGEST_SERVICE_PORT}
+      AUDIO_INGEST_SERVICE_GRPC_PORT: ${AUDIO_INGEST_SERVICE_GRPC_PORT}
+      AUDIO_INGEST_WORKSPACE_SERVICE_URL: ${AUDIO_INGEST_WORKSPACE_SERVICE_URL}
+      AUDIO_INGEST_VOICE_PROFILE_SERVICE_URL: ${AUDIO_INGEST_VOICE_PROFILE_SERVICE_URL}
+      RESULTS_SERVICE_URL: ${RESULTS_SERVICE_URL}
+      AUDIO_INGEST_POSTGRES_DSN: ${AUDIO_INGEST_POSTGRES_DSN}
+      AUDIO_INGEST_MINIO_ENDPOINT: ${AUDIO_INGEST_MINIO_ENDPOINT}
+      AUDIO_INGEST_MINIO_BUCKET: ${AUDIO_INGEST_MINIO_BUCKET}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      app-network:
+        aliases:
+          - ingest-service
+    ports:
+      - "8082:${AUDIO_INGEST_SERVICE_GRPC_PORT}"
+    depends_on:
+      nats:
+        condition: service_healthy
+      workspace-service:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${AUDIO_INGEST_SERVICE_PORT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  speaker-recognition-service:
+    build: ../services/speaker-recognition-service
+    container_name: speaker-recognition-service
+    environment:
+      WORKSPACE_SERVICE_URL: ${WORKSPACE_SERVICE_URL}
+      WORKSPACE_PARTICIPANTS_PATH: ${WORKSPACE_PARTICIPANTS_PATH}
+      VOICE_PROFILE_SERVICE_URL: ${VOICE_PROFILE_SERVICE_URL}
+      VOICE_PROFILE_GRPC_ADDR: ${VOICE_PROFILE_GRPC_ADDR}
+      VOICE_PROFILE_PATH: ${VOICE_PROFILE_PATH}
+      EMBED_THRESHOLD: ${EMBED_THRESHOLD}
+      SINGLE_PROFILE_EMBED_THRESHOLD: ${SINGLE_PROFILE_EMBED_THRESHOLD}
+      SHORT_SEGMENT_SECONDS: ${SHORT_SEGMENT_SECONDS}
+      SHORT_SEGMENT_EMBED_THRESHOLD: ${SHORT_SEGMENT_EMBED_THRESHOLD}
+      EMBED_MARGIN: ${EMBED_MARGIN}
+      APP_HOST: 0.0.0.0
+      APP_PORT: ${SPEAKER_RECOGNITION_PORT}
+    volumes:
+      - ./data/speechbrain_cache:/root/.cache/speechbrain
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:${SPEAKER_RECOGNITION_PORT}/docs')\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  transcript-builder-service:
+    build: ../services/transcript-builder-service
+    container_name: transcript-builder-service
+    environment:
+      NATS_URL: ${NATS_URL}
+      NATS_LISTEN_SUBJECT: ${NATS_TRANSCRIBED_SUBJECT}
+      NATS_PUBLISH_SUBJECT: ${NATS_DIARIZED_SUBJECT}
+      SPEAKER_RECOGNITION_URL: http://speaker-recognition-service:${SPEAKER_RECOGNITION_PORT}
+      GRPC_ADDRESS: ${INGEST_SERVICE_GRPC_URL}
+      MINIO_ENDPOINT: ${AUDIO_INGEST_MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${AUDIO_INGEST_MINIO_BUCKET}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      - app-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      speaker-recognition-service:
+        condition: service_healthy
+      audio-ingest-service:
+        condition: service_healthy
+
+  whisper-server:
+    build: ../services/whisperX-server
+    container_name: whisper-server
+    environment:
+      WHISPERX_MODEL: ${WHISPERX_MODEL}
+      WHISPERX_DEVICE: ${WHISPERX_DEVICE}
+      WHISPERX_COMPUTE_TYPE: ${WHISPERX_COMPUTE_TYPE}
+      WHISPERX_BATCH_SIZE: ${WHISPERX_BATCH_SIZE}
+      WHISPERX_HOST: ${WHISPERX_HOST}
+      WHISPERX_PORT: ${WHISPERX_PORT}
+      WHISPERX_MAX_FILE_SIZE: ${WHISPERX_MAX_FILE_SIZE}
+      WHISPERX_CHUNK_SIZE: ${WHISPERX_CHUNK_SIZE}
+      WHISPERX_LANGUAGE: ${WHISPERX_LANGUAGE}
+    networks:
+      - app-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; r = urllib.request.urlopen('http://localhost:${WHISPERX_PORT}/health'); exit(0 if r.status == 200 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 58
+      start_period: 30s
+
+  transcription-service:
+    build: ../services/transcription-service
+    container_name: transcription-service
+    environment:
+      WHISPERX_ENDPOINT: ${WHISPERX_ENDPOINT}
+      NATS_URL: ${NATS_URL}
+      NATS_SUBJECT: ${NATS_SUBJECT}
+      INGEST_SERVICE_GRPC_URL: ${INGEST_SERVICE_GRPC_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      - app-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      whisper-server:
+        condition: service_healthy
+      audio-ingest-service:
+        condition: service_healthy
+
+  voice-profile-service:
+    build: ../services/voice-profile-service
+    container_name: voice-profile-service
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      VOICE_PROFILE_SERVICE_PORT: ${VOICE_PROFILE_SERVICE_PORT}
+      PY_SPEACH_TO_VECTOR_SERVICE_ENDPOINT: ${PY_SPEACH_TO_VECTOR_SERVICE_ENDPOINT}
+      WORKSPACE_SERVICE_URL: ${WORKSPACE_SERVICE_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      - app-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      workspace-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${VOICE_PROFILE_SERVICE_PORT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  results-service:
+    build: ../services/results-service
+    container_name: results-service
+    environment:
+      RESULTS_SERVICE_PORT: ${RESULTS_SERVICE_PORT:-8080}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      RESULTS_SERVICE_MINIO_ENDPOINT: ${RESULTS_SERVICE_MINIO_ENDPOINT}
+      RESULTS_SERVICE_MINIO_BUCKET: ${RESULTS_SERVICE_MINIO_BUCKET:-results}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      - app-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${RESULTS_SERVICE_PORT:-8080}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  summarization-service:
+    build: ../services/summarization-service
+    container_name: summarization-service
+    environment:
+      NATS_URL: ${NATS_URL}
+      NATS_DIARIZED_SUBJECT: ${NATS_DIARIZED_SUBJECT}
+      SUMMARIZATION_PUBLISH_SUBJECT: ${SUMMARIZATION_PUBLISH_SUBJECT}
+      RESULTS_SERVICE_URL: ${RESULTS_SERVICE_URL}
+      WORKSPACE_SERVICE_URL: ${WORKSPACE_SERVICE_URL}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_BASE_URL: https://gate.trinity.tg/aurora
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-4-7}
+      PUBLIC_RESULTS_URL: ${PUBLIC_RESULTS_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    networks:
+      - app-network
+    depends_on:
+      nats:
+        condition: service_healthy
+      results-service:
+        condition: service_healthy
+
+  notification-service:
+    build: ../services/notification-service
+    container_name: notification-service
+    environment:
+      NATS_URL: ${NATS_URL}
+      NATS_SUMMARIZED_SUBJECT: ${SUMMARIZATION_PUBLISH_SUBJECT}
+      WORKSPACE_SERVICE_URL: ${WORKSPACE_SERVICE_URL}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    depends_on:
+      nats:
+        condition: service_healthy
+      workspace-service:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./monitoring/promtail.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge

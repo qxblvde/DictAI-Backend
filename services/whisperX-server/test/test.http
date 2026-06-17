@@ -1,0 +1,46 @@
+@timeout = 300000
+
+### Проверка здоровья сервиса
+GET http://localhost:8000/health
+Accept: application/json
+
+### Получить информацию о сервисе
+GET http://localhost:8000/
+Accept: application/json
+
+### Версия
+GET http://localhost:8000/version
+Accept: application/json
+
+### Транскрибация аудиофайла
+POST http://localhost:8000/transcribe
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="audio.mp3"
+Content-Type: audio/mpeg
+
+< ./audio.mp3
+--WebAppBoundary--
+
+### Транскрибация с указанием языка (русский)
+POST http://localhost:8000/transcribe?language=ru
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="audio.mp3"
+Content-Type: audio/mpeg
+
+< ./audio.mp3
+--WebAppBoundary--
+
+### Транскрибация с другим batch_size
+POST http://localhost:8000/transcribe?batch_size=8
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="audio.mp3"
+Content-Type: audio/mpeg
+
+< ./audio.mp3
+--WebAppBoundary--

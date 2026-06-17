@@ -1,0 +1,9 @@
+{
+  "event": "audio.uploaded",
+  "description": "Событие о том, что аудиофайл загружен",
+  "payload": {
+    "audio_id": "UUID идентификатор аудиофайла",
+    "workspace_id": "UUID workspace",
+    "uploader_user_id": "user_id загрузившего"
+  }
+}
